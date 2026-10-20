@@ -39,6 +39,8 @@ This is a **process topology proposal**, not a claim that every Codex thread is 
 - **Python runtime:** Owns application operations, durable metadata, Git/worktree lifecycle, Codex App Server process and streaming, and review/integration operations. Do not block the event loop with synchronous long-running subprocess waits.
 - **Codex App Server:** Provider-native agent harness. It owns Codex thread/turn/tool/approval/context semantics. We use its supported protocol, not terminal-screen scraping or a homegrown agent loop.
 
+**Agent autonomy boundary:** The application manages projects, sessions, tasks, workspaces, persistence, and user-controlled integration. The provider owns its native reasoning loop, planning, tool selection, tool execution, context management, and supported approval mechanisms. Our runtime should expose and coordinate these capabilities through supported provider interfaces rather than reimplementing them. Application-level controls should enforce workspace boundaries and user intent without unnecessarily restricting agent autonomy.
+
 ### Electron main ↔ Python
 
 Use **newline-delimited JSON over stdio** for MVP requests, responses, and asynchronous events. Example envelopes (illustrative; not a finalized schema):
