@@ -1,8 +1,8 @@
 # Agent Development System — Implementation Plan
 
-**Status:** M1 complete; M2 ready to begin.
+**Status:** M1 complete; M2 increment 1 implemented and awaiting review.
 
-**Current milestone:** **M2 — Minimal Python application runtime** (not started).
+**Current milestone:** **M2 — Minimal Python application runtime** (increment 1 complete; remaining increments not implemented).
 **Working rule:** Complete and verify one vertical slice at a time. This is a living execution plan, not another product specification.
 
 **Milestone boundary:** M0–M6 deliver the functional MVP. M7 is real-world dogfooding, and M8 is an evidence-driven technical deepening phase, not a prerequisite for calling the MVP functional.
@@ -63,6 +63,76 @@ Do not rewrite the whole plan merely because one tool behaves differently than e
 **Done when:** A small terminal client can talk to the Python runtime, start a session, receive events, and recover saved metadata after restart.
 
 **Not now:** Complex schema, a daemon that survives app exit, task orchestration.
+
+### M2 implementation increments
+
+Implement and review these separately; completing one does not complete M2.
+
+1. **Durable metadata foundation (implemented).** `runtime/store.py` owns SQLite
+   migrations, WAL, foreign keys, and short transactions. `runtime/projects.py`
+   asynchronously inspects existing Git checkouts before registration. Persist
+   projects, application sessions with an explicitly selected model, and separate
+   Codex thread reference rows. Verify dirty-checkout preservation, constraints,
+   failed migration rollback, and reopening the database. No provider calls.
+2. **Workspace lifecycle.** Add `runtime/workspaces.py` and workspace metadata;
+   create branch/worktree from the configured canonical branch, record the base
+   revision, inspect state, and refuse cleanup that would discard user changes.
+   Test Git failures and partial filesystem/database operations in disposable repos.
+3. **Codex transport and lifecycle.** Add `runtime/codex.py`, adapting the proven
+   spike framing, handshake, sandbox settings, and process-group cleanup without
+   importing or changing the spikes. One stdout reader dispatches request-ID
+   responses and per-thread/turn notifications, including completion before the
+   start response. Test interleaving, server requests, failures, deadlines,
+   backpressure, and cleanup using fake processes.
+4. **Runtime stdio API and terminal client.** Add `runtime/__main__.py` and a small
+   client. Define validated request IDs, responses, structured errors, bounded
+   events, cancellation, EOF, and shutdown. Keep stdout machine-readable. Test
+   the client/runtime boundary without inference.
+5. **Restart reconciliation.** Mark interrupted activity, compare durable workspace
+   records against Git, and verify safe shutdown/restart end to end. Never assume
+   persisted provider IDs or PIDs imply a surviving turn or an owned process.
+
+The package uses Python 3.11+ and the standard library. A single runtime thread
+owns SQLite writes; Git subprocess waits are asynchronous and outside database
+transactions. No task tables, execution framework, or provider hierarchy is added.
+Session/thread rows have independent IDs; a session can have zero or multiple
+native references. Workspace records and operational statuses arrive only when
+their lifecycle operations are implemented.
+
+Registration defaults to the existing local `main` branch. If absent, the caller
+must select another existing local branch explicitly. Registration accepts dirty
+and detached checkouts without switching branches or modifying files/index/refs.
+For now, require the main checkout root; reject bare repositories, subdirectories,
+and linked worktrees as canonical checkout inputs. Resolve symlinks to avoid
+duplicate registration. Re-registering with a different canonical branch is an
+error, pending an explicit configuration operation. Project initialization is
+outside this first increment.
+
+**Model selection contract for increment 3:** Runtime model selection is independent
+of the development agent's model. Increment 1 requires an explicit nonempty model
+when creating a logical session; this is metadata, not availability verification.
+Before inference, inspect the installed App Server schema, query supported
+`model/list` (including pagination), and reject an unavailable requested model
+without falling back to the user's configured model. Apply the override to
+`thread/start`, `thread/resume`, and `turn/start` wherever the installed protocol
+supports it; verify effective model fields where returned. Deterministic tests
+use fake protocol replies. Live integration tests require explicit approval and
+must request `gpt-6-luna`. No live inference was performed for increment 1.
+
+**Remaining verification risks:** App Server schema drift, event backpressure,
+Git/SQLite crash consistency, stale provider/process state, and M1's unresolved
+MCP isolation. M2 must not claim that native filesystem sandbox settings disable
+configured external integrations.
+
+Verify increment 1:
+
+```bash
+python3 -B -m unittest discover -s tests -v
+python3 -B -m unittest discover -s spikes -p 'test_*.py' -v
+```
+
+The metadata layer is currently a Python API, not yet the terminal service that
+constitutes M2 completion. Spikes remain independently runnable and unchanged.
 
 ## M3 — Minimal Electron desktop shell
 
@@ -149,11 +219,20 @@ A lead session may later request creation of a **separate** application-managed 
 | Initial architecture | Agreed, unvalidated | See `ARCHITECTURE.md` |
 | M0 Codex integration | **Complete** | Real two-turn ChatGPT-authenticated run; streamed events; process group absent after shutdown. See `spikes/README.md` |
 | M1 native sandbox/worktree | **Complete** | Read-only probe denied; worktree edit/test isolated; thread resumed with a new `cwd`; two concurrent turns overlapped in one App Server process. MCP isolation is unresolved. See `spikes/m1_README.md` |
-| M2+ | Not started | Do not pre-implement |
+| M2 | **Increment 1 implemented; awaiting review** | Metadata/Git registration tests; remaining increments listed above |
+| M3+ | Not started | Do not pre-implement |
 
 ### Milestone completion notes
 
 Add short entries here after each milestone:
+
+**M2 — increment 1 (2026-10-20; milestone incomplete):** Added standard-library
+SQLite metadata and read-only Git project registration, with independent logical
+session/native thread records and explicit session model selection. Twelve
+deterministic tests pass, covering persistence, migrations, constraints, Git input
+validation, dirty checkout preservation, and Git subprocess failure cleanup. No
+live inference, spike changes, worktree lifecycle, or stdio service. Architecture
+boundaries are unchanged. **Next: review increment 1 before workspace lifecycle.**
 
 **M1 — complete (2026-10-20):** `python3 -B spikes/m1_workspace_spike.py`
 used a generated failing calculator repo under `/tmp`. The read-only probe was
