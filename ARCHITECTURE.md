@@ -61,6 +61,15 @@ Reserve stdout for machine-readable messages; diagnostics go to stderr/files. In
 
 Launch and communicate with **Codex App Server via its supported stdio JSON-RPC protocol**. Validate version/protocol capabilities and subscription-based authentication in the spike. Do not assume private or experimental APIs are stable. Protect credentials and never log tokens.
 
+**M0 evidence:** Python completed a real two-turn conversation on Codex
+`0.162.0-alpha.17.2` using the existing Codex-managed ChatGPT login. The stdio wire
+uses newline-delimited JSON, omits the `jsonrpc` field, and requires
+`initialize` → `initialized` before thread/turn requests. There is no shutdown RPC
+in this version; the spike closes stdin and uses bounded process-group cleanup.
+App Server remains experimental. See [`spikes/README.md`](spikes/README.md) for
+reproduction, limitations, and authentication distribution constraints. No process
+topology change is required; concurrency and sandbox behavior remain unvalidated.
+
 ## 3. State ownership
 
 | Store | Authority / contents | Not its responsibility |

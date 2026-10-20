@@ -1,7 +1,8 @@
 # Agent Development System — Implementation Plan
 
-**Status:** Ready to begin implementation.  
-**Current milestone:** **M0 — Codex App Server integration spike**.  
+**Status:** M0 complete; M1 ready to begin.
+
+**Current milestone:** **M1 — Repository inspection, native sandbox, and worktree spike** (not started).
 **Working rule:** Complete and verify one vertical slice at a time. This is a living execution plan, not another product specification.
 
 **Milestone boundary:** M0–M6 deliver the functional MVP. M7 is real-world dogfooding, and M8 is an evidence-driven technical deepening phase, not a prerequisite for calling the MVP functional.
@@ -146,12 +147,25 @@ A lead session may later request creation of a **separate** application-managed 
 | --- | --- | --- |
 | Product model | Agreed | See `PRD.md` |
 | Initial architecture | Agreed, unvalidated | See `ARCHITECTURE.md` |
-| M0 Codex integration | **Next** | Run App Server protocol/authentication spike |
+| M0 Codex integration | **Complete** | Real two-turn ChatGPT-authenticated run; streamed events; process group absent after shutdown. See `spikes/README.md` |
 | M1+ | Not started | Do not pre-implement |
 
 ### Milestone completion notes
 
 Add short entries here after each milestone:
+
+**M0 — complete (2026-10-20):** `python3 spikes/m0_codex_app_server.py`
+completed two real turns in one thread on Codex `0.162.0-alpha.17.2`, using the
+existing ChatGPT login and configured `gpt-6.1-sol` model. Both turns completed,
+text deltas streamed, and the second recalled the first turn's marker. App Server
+exited 0 after stdin EOF; a host check found no remaining process-group members.
+Four deterministic test methods also passed, covering protocol errors, event
+ordering, pipe backpressure, timeout, and signal cleanup without model calls.
+The initial workspace-sandbox launch failed before initialization; approved host
+execution succeeded. No architecture change was required beyond documenting wire
+framing and shutdown details. App Server is experimental, and account access is
+verified only for the tested requests. Full evidence and limitations are in
+[`spikes/README.md`](spikes/README.md). **Next: M1; no M1 implementation yet.**
 
 ```text
 Milestone:
