@@ -132,6 +132,4 @@ it excludes commercial/hosted services from App Server authentication. Revisit
 authentication before changing this project's local single-user distribution
 scope. That future product decision is outside M0.
 
-The existing process topology remains valid. M0 does not establish concurrency,
-resume behavior, workspace reassociation, or sandbox guarantees. M1 is next;
-none of it is implemented by this spike.
+M1's follow-on evidence and limitations are in [`m1_README.md`](m1_README.md).

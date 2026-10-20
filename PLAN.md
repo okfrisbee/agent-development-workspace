@@ -1,8 +1,8 @@
 # Agent Development System — Implementation Plan
 
-**Status:** M0 complete; M1 ready to begin.
+**Status:** M1 complete; M2 ready to begin.
 
-**Current milestone:** **M1 — Repository inspection, native sandbox, and worktree spike** (not started).
+**Current milestone:** **M2 — Minimal Python application runtime** (not started).
 **Working rule:** Complete and verify one vertical slice at a time. This is a living execution plan, not another product specification.
 
 **Milestone boundary:** M0–M6 deliver the functional MVP. M7 is real-world dogfooding, and M8 is an evidence-driven technical deepening phase, not a prerequisite for calling the MVP functional.
@@ -148,11 +148,26 @@ A lead session may later request creation of a **separate** application-managed 
 | Product model | Agreed | See `PRD.md` |
 | Initial architecture | Agreed, unvalidated | See `ARCHITECTURE.md` |
 | M0 Codex integration | **Complete** | Real two-turn ChatGPT-authenticated run; streamed events; process group absent after shutdown. See `spikes/README.md` |
-| M1+ | Not started | Do not pre-implement |
+| M1 native sandbox/worktree | **Complete** | Read-only probe denied; worktree edit/test isolated; thread resumed with a new `cwd`; two concurrent turns overlapped in one App Server process. MCP isolation is unresolved. See `spikes/m1_README.md` |
+| M2+ | Not started | Do not pre-implement |
 
 ### Milestone completion notes
 
 Add short entries here after each milestone:
+
+**M1 — complete (2026-10-20):** `python3 -B spikes/m1_workspace_spike.py`
+used a generated failing calculator repo under `/tmp`. The read-only probe was
+blocked and canonical state stayed clean. Codex fixed `calculator.py` in a
+worktree and its test passed. After restarting App Server, the same provider
+thread resumed with a new `cwd`; the new worktree returned to the failing
+canonical baseline, so filesystem state does not follow conversation history.
+Two shell commands on separate threads overlapped in one App Server process. A
+single stdout reader is required in the Python client. Host process-group checks
+found no App Server leftovers. Config overrides did not prevent MCP tool items;
+only synthetic fixture content was used, and full integration isolation remains
+unknown. The official documentation example and installed schema differ in the
+legacy sandbox string casing; implementation follows the installed schema. See
+[`spikes/m1_README.md`](spikes/m1_README.md). **Next: M2; no M2 implementation yet.**
 
 **M0 — complete (2026-10-20):** `python3 spikes/m0_codex_app_server.py`
 completed two real turns in one thread on Codex `0.162.0-alpha.17.2`, using the

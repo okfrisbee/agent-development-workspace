@@ -67,8 +67,8 @@ uses newline-delimited JSON, omits the `jsonrpc` field, and requires
 `initialize` → `initialized` before thread/turn requests. There is no shutdown RPC
 in this version; the spike closes stdin and uses bounded process-group cleanup.
 App Server remains experimental. See [`spikes/README.md`](spikes/README.md) for
-reproduction, limitations, and authentication distribution constraints. No process
-topology change is required; concurrency and sandbox behavior remain unvalidated.
+reproduction and authentication limits, and [`spikes/m1_README.md`](spikes/m1_README.md)
+for M1's sandbox/worktree evidence. No process topology change was required.
 
 ## 3. State ownership
 
@@ -101,7 +101,7 @@ Workspace
 ```
 
 - **Application Session:** User-visible continuity and navigation; one primary agent for MVP. It may span multiple tasks and survive worktree deletion.
-- **Provider Thread:** Native Codex conversation. A session will *usually* map to one Codex thread initially, but the schema should not assume a permanent 1:1 mapping: resuming a conversation after deleting its old working directory may require a new provider thread with selectively transferred context. **Verify actual thread/cwd behavior.**
+- **Provider Thread:** Native Codex conversation. A session will *usually* map to one Codex thread initially, but the schema should not assume a permanent 1:1 mapping. M1 verified that a thread can resume with a new `cwd`; its conversation history continues, but uncommitted files from the old worktree do not move into the new one. Persist the worktree or save its changes separately before cleanup.
 - **Task:** Durable project-owned objective, not a Codex turn. A task can be created without execution and later assigned to any compatible session. One task may involve multiple turns; multiple related tasks may use one workspace.
 - **Workspace:** Temporary branch/worktree for a coherent set of proposed code changes. It is not identical to the session or task. One active workspace per session is a reasonable MVP simplification, not a universal future invariant.
 - **Execution/attempt:** Useful internal lifecycle/telemetry concept when needed, but not a mandatory user-visible object or separate process.
@@ -148,6 +148,17 @@ This supersedes the earlier mandatory **Git worktree + Docker** proposal. Worktr
 **Explicitly deferred:** Putting the App Server and arbitrary project code in one all-purpose Docker container, or requiring a common external Docker executor. If stronger execution isolation/reproducibility is justified later, investigate a trusted harness outside an external Docker/VM executor, provided the provider's supported interfaces allow it.
 
 **Security baseline:** Treat repository contents, tool output, and generated code as untrusted; avoid granting unnecessary filesystem/network permissions; keep authentication secrets out of worktrees and execution logs. Do not promise hostile-code containment without testing the actual sandbox boundary.
+
+**M1 evidence (Linux, Codex `0.162.0-alpha.17.2`):** `read-only` blocked a
+direct App Server write probe; `workspaceWrite` with one explicit writable root
+allowed a test fix in a Git worktree while the canonical fixture remained clean.
+Two shell commands on separate threads overlapped in one App Server process. The
+Python client must use one stdout reader and dispatch events, even when multiple
+turns are active. App Server resumed a persistent thread against a new `cwd`, but
+the new worktree did not contain the old uncommitted edit. Configured apps/plugins
+and empty `mcp_servers` overrides did not prevent all `mcpToolCall` items, so this
+spike does not establish MCP isolation or hostile-code containment. See
+[`spikes/m1_README.md`](spikes/m1_README.md) for reproducible evidence and limits.
 
 ## 7. Task proposals and context
 

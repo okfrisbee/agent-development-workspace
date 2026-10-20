@@ -8,6 +8,7 @@ import os
 import signal
 import sys
 import tempfile
+import time
 
 
 def emit(event, **fields):
@@ -21,19 +22,25 @@ class SpikeError(Exception):
 class AppServer:
     """One sequential RPC caller; notifications can arrive between any replies."""
 
-    def __init__(self, executable, cwd):
+    def __init__(self, executable, cwd, *, extra_args=(), stream_text=True,
+                 reject_mcp_tool_calls=False):
         self.executable = executable
         self.cwd = cwd
+        self.extra_args = list(extra_args)
+        self.stream_text = stream_text
+        self.reject_mcp_tool_calls = reject_mcp_tool_calls
         self.proc = None
         self.stderr_task = None
         self.stderr_bytes = 0
         self.next_id = 0
         self.completed = {}
         self.text = {}
+        self.events = []
 
     async def start(self):
         self.proc = await asyncio.create_subprocess_exec(
-            self.executable, "app-server", "--listen", "stdio://",
+            self.executable, "app-server", *self.extra_args,
+            "--listen", "stdio://",
             cwd=self.cwd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
@@ -77,13 +84,28 @@ class AppServer:
     def notification(self, message):
         method = message["method"]
         params = message.get("params", {})
+        item = params.get("item", {})
+        if method in {"item/started", "item/completed"}:
+            safe_item = {key: item[key] for key in
+                         ("id", "type", "cwd", "status", "exitCode") if key in item}
+            safe_params = {key: params[key] for key in ("threadId", "turnId")
+                           if key in params}
+            safe_params["item"] = safe_item
+            self.events.append((time.monotonic(),
+                                {"method": method, "params": safe_params}))
+        if (self.reject_mcp_tool_calls and method == "item/started"
+                and item.get("type") == "mcpToolCall"):
+            emit("mcp/blocked", threadId=params.get("threadId"))
+            raise SpikeError("An MCP tool started despite the isolated M1 config")
         # Deliberate allowlist: no raw auth/account/config/tool payloads.
         fields = {key: params[key] for key in ("threadId", "turnId", "itemId")
                   if key in params}
         if method == "item/agentMessage/delta":
-            fields["delta"] = params["delta"]
             key = (params["threadId"], params["turnId"])
             self.text[key] = self.text.get(key, "") + params["delta"]
+            if not self.stream_text:
+                return
+            fields["delta"] = params["delta"]
         for key in ("turn", "item", "thread"):
             value = params.get(key)
             if isinstance(value, dict):
