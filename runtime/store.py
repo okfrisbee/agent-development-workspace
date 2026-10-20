@@ -5,7 +5,7 @@ import sqlite3
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Each tuple is one atomic migration. Append migrations rather than editing v1.
 MIGRATIONS = (
@@ -30,6 +30,22 @@ MIGRATIONS = (
         )""",
         "CREATE INDEX sessions_project ON sessions(project_id)",
         "CREATE INDEX threads_session ON provider_threads(session_id)",
+    ),
+    (
+        """CREATE TABLE workspaces (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL REFERENCES sessions(id),
+            path TEXT NOT NULL UNIQUE,
+            branch TEXT NOT NULL UNIQUE,
+            base_revision TEXT NOT NULL,
+            common_dir TEXT NOT NULL,
+            git_dir TEXT,
+            state TEXT NOT NULL CHECK (state IN
+                ('creating', 'ready', 'removing', 'removed', 'needs_attention')),
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        )""",
+        """CREATE UNIQUE INDEX workspace_session_active ON workspaces(session_id)
+            WHERE state != 'removed'""",
     ),
 )
 
@@ -158,3 +174,41 @@ class Store:
             "SELECT * FROM provider_threads WHERE session_id = ? ORDER BY created_at, id",
             (session_id,),
         )]
+
+    def reserve_workspace(self, workspace_id: str, session_id: str, path: str,
+                          branch: str, base_revision: str, common_dir: str) -> dict:
+        """Write creation intent before any Git mutation. Called by Workspaces."""
+        with self.connection:
+            self.connection.execute(
+                """INSERT INTO workspaces
+                   (id, session_id, path, branch, base_revision, common_dir, state)
+                   VALUES (?, ?, ?, ?, ?, ?, 'creating')""",
+                (workspace_id, session_id, path, branch, base_revision, common_dir),
+            )
+        return self.get_workspace(workspace_id)
+
+    def get_workspace(self, workspace_id: str) -> dict:
+        row = self.connection.execute(
+            "SELECT * FROM workspaces WHERE id = ?", (workspace_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(workspace_id)
+        return dict(row)
+
+    def list_workspaces(self, session_id: str) -> list[dict]:
+        return [dict(row) for row in self.connection.execute(
+            "SELECT * FROM workspaces WHERE session_id = ? ORDER BY created_at, id",
+            (session_id,),
+        )]
+
+    def transition_workspace(self, workspace_id: str, expected: str, state: str,
+                             *, git_dir: str | None = None) -> dict:
+        with self.connection:
+            result = self.connection.execute(
+                """UPDATE workspaces SET state = ?, git_dir = coalesce(?, git_dir)
+                   WHERE id = ? AND state = ?""",
+                (state, git_dir, workspace_id, expected),
+            )
+            if result.rowcount != 1:
+                raise ValueError("Workspace state changed; inspect before retrying")
+        return self.get_workspace(workspace_id)

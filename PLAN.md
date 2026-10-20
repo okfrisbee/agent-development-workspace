@@ -1,8 +1,8 @@
 # Agent Development System — Implementation Plan
 
-**Status:** M1 complete; M2 increment 1 implemented and awaiting review.
+**Status:** M1 complete; M2 increment 1 approved; increment 2 implemented and awaiting review.
 
-**Current milestone:** **M2 — Minimal Python application runtime** (increment 1 complete; remaining increments not implemented).
+**Current milestone:** **M2 — Minimal Python application runtime** (increments 1–2 complete; remaining increments not implemented).
 **Working rule:** Complete and verify one vertical slice at a time. This is a living execution plan, not another product specification.
 
 **Milestone boundary:** M0–M6 deliver the functional MVP. M7 is real-world dogfooding, and M8 is an evidence-driven technical deepening phase, not a prerequisite for calling the MVP functional.
@@ -74,7 +74,7 @@ Implement and review these separately; completing one does not complete M2.
    projects, application sessions with an explicitly selected model, and separate
    Codex thread reference rows. Verify dirty-checkout preservation, constraints,
    failed migration rollback, and reopening the database. No provider calls.
-2. **Workspace lifecycle.** Add `runtime/workspaces.py` and workspace metadata;
+2. **Workspace lifecycle (implemented).** Add `runtime/workspaces.py` and workspace metadata;
    create branch/worktree from the configured canonical branch, record the base
    revision, inspect state, and refuse cleanup that would discard user changes.
    Test Git failures and partial filesystem/database operations in disposable repos.
@@ -124,7 +124,44 @@ Git/SQLite crash consistency, stale provider/process state, and M1's unresolved
 MCP isolation. M2 must not claim that native filesystem sandbox settings disable
 configured external integrations.
 
-Verify increment 1:
+### Workspace lifecycle API and safety (increment 2)
+
+`Workspaces(store, root)` owns generated `root/<workspace-id>` paths and
+`runtime/<workspace-id>` branches. Use its async `create(session_id)`,
+`inspect(workspace_id)`, and `remove(workspace_id)` methods. Keep one manager in
+the runtime, with its root outside registered canonical checkouts and Git metadata.
+SQLite schema v2 adds workspace records without changing migration v1 or existing
+session/thread records. One unfinished workspace per session is enforced by a
+partial unique index; listing the session's workspaces allows reuse of a ready one.
+
+Creation resolves the configured canonical branch to a commit, commits a
+`creating` intent, and then runs non-forced Git worktree creation from that exact
+commit. Checkout hooks are disabled for this operation. Only a verified checkout
+becomes `ready`, with its linked Git directory identity persisted. Git waits occur
+outside SQLite transactions. A manager lock serializes operations, and conditional
+database transitions guard against competing owners.
+
+Inspection verifies path, repository, linked Git directory, branch, and Git's
+worktree registration; it reports current HEAD, canonical revision, and dirty state
+without rebasing. Removal requires a ready, verified workspace with no staged,
+unstaged, untracked, or ignored content. Assume-unchanged/skip-worktree flags also
+block removal because Git status can hide edits. Git rechecks removal without
+`--force`. Session/thread metadata and the branch remain, preserving committed
+work even after the worktree directory is gone. No branch deletion or integration
+operation is implemented.
+
+Git and SQLite cannot commit atomically. Removal first commits `removing`; success
+becomes `removed`. Errors/cancellation retain files, branches, and a
+`needs_attention` record. If even the failure-state update cannot be written,
+the original `creating`/`removing` intent remains. These states block replacement
+and automatic removal. Use metadata listing and manual inspection for now;
+restart reconciliation/recovery belongs to increment 5. No forced rollback,
+reset, prune, or automatic retry is attempted. Callers must stop execution before
+cleanup; this increment has no provider execution to coordinate. External Git
+operations or filesystem writers must not race cleanup; the checks are not an
+OS-level lock or hostile-code security boundary.
+
+Verify increments 1–2:
 
 ```bash
 python3 -B -m unittest discover -s tests -v
@@ -219,12 +256,22 @@ A lead session may later request creation of a **separate** application-managed 
 | Initial architecture | Agreed, unvalidated | See `ARCHITECTURE.md` |
 | M0 Codex integration | **Complete** | Real two-turn ChatGPT-authenticated run; streamed events; process group absent after shutdown. See `spikes/README.md` |
 | M1 native sandbox/worktree | **Complete** | Read-only probe denied; worktree edit/test isolated; thread resumed with a new `cwd`; two concurrent turns overlapped in one App Server process. MCP isolation is unresolved. See `spikes/m1_README.md` |
-| M2 | **Increment 1 implemented; awaiting review** | Metadata/Git registration tests; remaining increments listed above |
+| M2 | **Increments 1–2 implemented; increment 2 awaiting review** | Metadata/Git workspace tests; remaining increments listed above |
 | M3+ | Not started | Do not pre-implement |
 
 ### Milestone completion notes
 
 Add short entries here after each milestone:
+
+**M2 — increment 2 (2026-10-20; milestone incomplete):** Added workspace creation,
+inspection, and clean non-forced removal with retained branches; schema v2 records
+ownership, pinned base revisions, and durable lifecycle intent. Thirty deterministic
+tests pass, including v1 migration, dirty/hidden file preservation, competing
+creation, ownership changes, Git failures, cancellation, and SQLite failures around
+Git mutations. No live model calls; spikes and increment 1 APIs are unchanged.
+Failed/partial operations deliberately require recovery; restart reconciliation
+remains increment 5. No architecture deviation. **Next: review increment 2 before
+Codex transport/lifecycle.**
 
 **M2 — increment 1 (2026-10-20; milestone incomplete):** Added standard-library
 SQLite metadata and read-only Git project registration, with independent logical

@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from runtime.projects import ProjectError, inspect_project, register_project
-from runtime.store import Store
+from runtime.store import SCHEMA_VERSION, Store
 
 
 class MetadataTests(unittest.TestCase):
@@ -22,7 +22,7 @@ class MetadataTests(unittest.TestCase):
 
     def test_migration_wal_foreign_keys_and_reopen(self):
         with Store(self.db) as store:
-            self.assertEqual(store.connection.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual(store.connection.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
             self.assertEqual(store.connection.execute("PRAGMA journal_mode").fetchone()[0], "wal")
             self.assertEqual(store.connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
             project = store.register_project(self.root)
